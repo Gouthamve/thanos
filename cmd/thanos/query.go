@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"strings"
-
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/okgroup"
@@ -120,7 +118,7 @@ func runQuery(
 	level.Info(logger).Log(
 		"msg", "starting query node",
 		"api-address", apiAddr,
-		"store.addresses", strings.Join(cfg.StoreAddresses, ","),
+		"store.address", storesURL.String(),
 		"query.timeout", cfg.QueryTimeout,
 		"query.max-concurrent", cfg.MaxConcurrentQueries,
 	)

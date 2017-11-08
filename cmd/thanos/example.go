@@ -23,11 +23,9 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
 		Default("2m").Duration()
 
-	queryStores := cmd.Flag("query.store", "store API to get data from").Required().URL()
-
 	// Sidecar flags.
 	storeAddress := cmd.Flag("sidecar.address", "listen address of sidecar store API").
-		Default("localhost:19090").String()
+		Default("localhost:19090").URL()
 
 	metricsAddr := cmd.Flag("sidecar.metrics-address", "metrics address for the sidecar").
 		Default("localhost:19091").String()
@@ -51,16 +49,15 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
 		var g okgroup.Group
 		queryGroup, err := runQuery(logger, metrics, *apiAddr, query.Config{
-			StoreAddresses:       []string{*storeAddress},
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, *queryStores)
+		}, *storeAddress)
 		if err != nil {
 			return g, errors.Wrap(err, "query setup")
 		}
 		g.AddGroup(queryGroup)
 
-		sidecarGroup, err := runSidecar(logger, metrics, *storeAddress, *metricsAddr, *promURL, *dataDir, *gcsBucket)
+		sidecarGroup, err := runSidecar(logger, metrics, (*storeAddress).String(), *metricsAddr, *promURL, *dataDir, *gcsBucket)
 		if err != nil {
 			return g, errors.Wrap(err, "sidecar setup")
 		}
