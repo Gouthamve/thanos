@@ -3,13 +3,14 @@ package main
 import (
 	"gopkg.in/alecthomas/kingpin.v2"
 
+	"fmt"
+	"net/url"
+
 	"github.com/go-kit/kit/log"
 	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
-	"net/url"
-	"fmt"
 )
 
 func registerExample(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -59,13 +60,13 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 		queryGroup, err := runQuery(logger, metrics, *apiAddr, nil, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, storeURL)
+		}, nil, storeURL)
 		if err != nil {
 			return g, errors.Wrap(err, "query setup")
 		}
 		g.AddGroup(queryGroup)
 
-		sidecarGroup, err := runSidecar(logger, metrics, *storeAddress, *metricsAddr, *promURL, *dataDir, *gcsBucket)
+		sidecarGroup, err := runSidecar(logger, metrics, *storeAddress, *metricsAddr, *promURL, *dataDir, nil, *gcsBucket)
 		if err != nil {
 			return g, errors.Wrap(err, "sidecar setup")
 		}

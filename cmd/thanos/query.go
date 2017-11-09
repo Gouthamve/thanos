@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/improbable-eng/thanos/pkg/cluster"
 	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
@@ -44,11 +45,29 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 
 	stores := cmd.Arg("store", "store APIs to get data from").Required().URL()
 
+	peers := cmd.Flag("cluster.peers", "Initial peers to join the cluster").Strings()
+
+	clusterBindAddr := cmd.Flag("cluster.address", "listen address for clutser").
+		Default(defaultClusterAddr).String()
+
+	clusterAdvertiseAddr := cmd.Flag("cluster.advertise-address", "explicit address to advertise in cluster").
+		String()
+
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
+		peer, err := joinCluster(
+			logger,
+			cluster.PeerTypeQuery,
+			*clusterBindAddr,
+			*clusterAdvertiseAddr,
+			*peers,
+		)
+		if err != nil {
+			return okgroup.Group{}, errors.Wrap(err, "join cluster")
+		}
 		return runQuery(logger, metrics, *apiAddr, *externalURL, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, *stores)
+		}, peer, *stores)
 	}
 }
 
@@ -60,6 +79,7 @@ func runQuery(
 	apiAddr string,
 	externalURL *url.URL,
 	cfg query.Config,
+	peer *cluster.Peer,
 	storesURL *url.URL,
 ) (
 	okgroup.Group, error,
@@ -81,14 +101,13 @@ func runQuery(
 		externalURL = apiURL
 	}
 
-
 	// Set up query API engine.
 	queryable := query.NewQueryable(logger, stores.get)
 	engine := promql.NewEngine(queryable, cfg.EngineOpts(logger))
 	api := v1.NewAPI(engine, queryable, cfg)
 	webUI := ui.New(
 		ctx,
-			logger,
+		logger,
 		externalURL,
 		apiURL,
 		engine,
