@@ -15,10 +15,12 @@ import (
 	"github.com/improbable-eng/thanos/pkg/okgroup"
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/improbable-eng/thanos/pkg/query/api"
+	"github.com/improbable-eng/thanos/pkg/query/ui"
 	"github.com/improbable-eng/thanos/pkg/store/storepb"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/route"
+	"github.com/prometheus/common/version"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/tsdb/labels"
 	"google.golang.org/grpc"
@@ -32,6 +34,8 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	apiAddr := cmd.Flag("api-address", "listen host:port address for the query API").
 		Default("0.0.0.0:19099").String()
 
+	externalURL := cmd.Flag("external-url", "externalURL address for the UI. If empty, api-address will be used").URL()
+
 	queryTimeout := cmd.Flag("query.timeout", "maximum time to process query by query node").
 		Default("2m").Duration()
 
@@ -41,7 +45,7 @@ func registerQuery(m map[string]setupFunc, app *kingpin.Application, name string
 	stores := cmd.Arg("store", "store APIs to get data from").Required().URL()
 
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
-		return runQuery(logger, metrics, *apiAddr, query.Config{
+		return runQuery(logger, metrics, *apiAddr, *externalURL, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
 		}, *stores)
@@ -54,27 +58,55 @@ func runQuery(
 	logger log.Logger,
 	reg *prometheus.Registry,
 	apiAddr string,
+	externalURL *url.URL,
 	cfg query.Config,
 	storesURL *url.URL,
 ) (
 	okgroup.Group, error,
 ) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	stores := &storePool{
 		logger:   logger,
 		discover: storesURL,
 		stores:   map[string]*storeInfo{},
 	}
 
+	apiURL, err := url.Parse(apiAddr)
+	if err != nil {
+		return okgroup.Group{}, err
+	}
+
+	if externalURL == nil {
+		externalURL = apiURL
+	}
+
+
 	// Set up query API engine.
 	queryable := query.NewQueryable(logger, stores.get)
 	engine := promql.NewEngine(queryable, cfg.EngineOpts(logger))
 	api := v1.NewAPI(engine, queryable, cfg)
+	webUI := ui.New(
+		ctx,
+			logger,
+		externalURL,
+		apiURL,
+		engine,
+		ui.ThanosVersion{
+			Version:   version.Version,
+			Revision:  version.Revision,
+			Branch:    version.Branch,
+			BuildUser: version.BuildUser,
+			BuildDate: version.BuildDate,
+			GoVersion: version.GoVersion,
+		},
+		map[string]string{},
+	)
 
 	var g okgroup.Group
 
 	// Discover stores and instantiate connections in the background.
 	{
-		ctx, cancel := context.WithCancel(context.Background())
 		tick := time.NewTicker(30 * time.Second)
 
 		g.Add(func() error {
@@ -93,10 +125,11 @@ func runQuery(
 			tick.Stop()
 		})
 	}
-	// Start query API HTTP server.
+	// Start query API + UI HTTP server.
 	{
-		router := route.New().WithPrefix("/api/v1")
-		api.Register(router)
+		router := route.New()
+		api.Register(router.WithPrefix("/api/v1"))
+		webUI.Register(router)
 
 		mux := http.NewServeMux()
 		registerMetrics(mux, reg)

@@ -8,6 +8,8 @@ import (
 	"github.com/improbable-eng/thanos/pkg/query"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
+	"net/url"
+	"fmt"
 )
 
 func registerExample(m map[string]setupFunc, app *kingpin.Application, name string) {
@@ -25,7 +27,7 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	// Sidecar flags.
 	storeAddress := cmd.Flag("sidecar.address", "listen address of sidecar store API").
-		Default("localhost:19090").URL()
+		Default("localhost:19090").String()
 
 	metricsAddr := cmd.Flag("sidecar.metrics-address", "metrics address for the sidecar").
 		Default("localhost:19091").String()
@@ -48,16 +50,22 @@ func registerExample(m map[string]setupFunc, app *kingpin.Application, name stri
 
 	m[name] = func(logger log.Logger, metrics *prometheus.Registry) (okgroup.Group, error) {
 		var g okgroup.Group
-		queryGroup, err := runQuery(logger, metrics, *apiAddr, query.Config{
+
+		storeURL, err := url.Parse(fmt.Sprintf("tcp://%s", *storeAddress))
+		if err != nil {
+			return g, err
+		}
+
+		queryGroup, err := runQuery(logger, metrics, *apiAddr, nil, query.Config{
 			QueryTimeout:         *queryTimeout,
 			MaxConcurrentQueries: *maxConcurrentQueries,
-		}, *storeAddress)
+		}, storeURL)
 		if err != nil {
 			return g, errors.Wrap(err, "query setup")
 		}
 		g.AddGroup(queryGroup)
 
-		sidecarGroup, err := runSidecar(logger, metrics, (*storeAddress).String(), *metricsAddr, *promURL, *dataDir, *gcsBucket)
+		sidecarGroup, err := runSidecar(logger, metrics, *storeAddress, *metricsAddr, *promURL, *dataDir, *gcsBucket)
 		if err != nil {
 			return g, errors.Wrap(err, "sidecar setup")
 		}

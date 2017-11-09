@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Prometheus Time Series Collection and Processing Server</title>
+    <title>Thanos long term storage Prometheus solution</title>
     <link rel="shortcut icon" href="{{ pathPrefix }}/static/img/favicon.ico?v={{ buildVersion }}">
     <script src="{{ pathPrefix }}/static/vendor/js/jquery.min.js?v={{ buildVersion }}"></script>
     <script src="{{ pathPrefix }}/static/vendor/bootstrap-3.3.1/js/bootstrap.min.js?v={{ buildVersion }}"></script>
@@ -31,24 +31,16 @@
             <span class="icon-bar"></span>
             <span class="icon-bar"></span>
           </button>
-          <a class="navbar-brand" href="{{ pathPrefix }}/">Prometheus</a>
+          <a class="navbar-brand" href="{{ pathPrefix }}/">Thanos</a>
         </div>
         <div id="navbar" class="navbar-collapse collapse">
           <ul class="nav navbar-nav navbar-left">
-            {{$consoles := consolesPath}}
-            {{if $consoles}}
-            <li><a href="{{$consoles}}">Consoles</a></li>
-            {{ end }}
-            <li><a href="{{ pathPrefix }}/alerts">Alerts</a></li>
             <li><a href="{{ pathPrefix }}/graph">Graph</a></li>
             <li class="dropdown">
               <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Status <span class="caret"></span></a>
               <ul class="dropdown-menu">
                 <li><a href="{{ pathPrefix }}/status">Runtime &amp; Build Information</a></li>
                 <li><a href="{{ pathPrefix }}/flags">Command-Line Flags</a></li>
-                <li><a href="{{ pathPrefix }}/config">Configuration</a></li>
-                <li><a href="{{ pathPrefix }}/rules">Rules</a></li>
-                <li><a href="{{ pathPrefix }}/targets">Targets</a></li>
               </ul>
             </li>
             <li>
